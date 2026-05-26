@@ -2,6 +2,6 @@ node_modules
 dist
 .DS_Store
 .venv-convert
-models
-Dataset/
-Json datasets/
+/models
+/Dataset/
+/Json datasets/
