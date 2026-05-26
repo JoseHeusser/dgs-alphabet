@@ -63,6 +63,7 @@ const USER_COPY = {
     navPractice: 'Üben',
     navData: 'Daten',
     navTraining: 'Training',
+    navStory: 'Story',
     noHand: 'Keine Hand',
     loading: 'Lädt',
     handDetected: 'Hand erkannt',
@@ -76,6 +77,9 @@ const USER_COPY = {
     speak: 'Sprechen',
     newWord: 'Neues Wort',
     ownModel: 'Eigenes Modell',
+    wordDone: 'Geschafft!',
+    wordDoneSubtitle: (word) => `Du hast „${word}" gebärdet`,
+    celebrate: (word) => `Super! ${word}`,
     historyEyebrow: 'Projektverlauf',
     historyTitle: 'Vom Datensatz zur Übung',
     historyText: 'Diese Seite ist die Hauptansicht zum Üben. Das Standardmodell ist bereits enthalten. Wer möchte, kann eigene Handdaten aufnehmen, ein persönliches Modell trainieren und es hier über',
@@ -90,6 +94,7 @@ const USER_COPY = {
     navPractice: 'Practice',
     navData: 'Data',
     navTraining: 'Training',
+    navStory: 'Story',
     noHand: 'No hand',
     loading: 'Loading',
     handDetected: 'Hand detected',
@@ -103,6 +108,9 @@ const USER_COPY = {
     speak: 'Speak',
     newWord: 'New word',
     ownModel: 'Own model',
+    wordDone: 'Nice!',
+    wordDoneSubtitle: (word) => `You signed "${word}"`,
+    celebrate: (word) => `Nice! ${word}`,
     historyEyebrow: 'Project History',
     historyTitle: 'From dataset to practice',
     historyText: 'This is the main practice view. A default model is already included. Anyone can collect their own hand data, train a personal model, and upload it here through',
@@ -574,6 +582,47 @@ function LandmarkOverlay({ landmarks }) {
       {landmarks.map((point, index) => (
         <circle key={index} cx={point.x} cy={point.y} r="0.008" />
       ))}
+    </svg>
+  );
+}
+
+function HandFrame({ landmarks }) {
+  if (!landmarks?.length) return null;
+
+  const xs = landmarks.map((p) => p.x);
+  const ys = landmarks.map((p) => p.y);
+  const padX = 0.045;
+  const padY = 0.06;
+  const minX = Math.max(0, Math.min(...xs) - padX);
+  const maxX = Math.min(1, Math.max(...xs) + padX);
+  const minY = Math.max(0, Math.min(...ys) - padY);
+  const maxY = Math.min(1, Math.max(...ys) + padY);
+  const w = maxX - minX;
+  const h = maxY - minY;
+  const corner = Math.min(w, h) * 0.18;
+
+  return (
+    <svg className="handFrame" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+      <rect
+        className="handFrame-box"
+        x={minX}
+        y={minY}
+        width={w}
+        height={h}
+        rx="0.022"
+        ry="0.022"
+      />
+      <g className="handFrame-corners">
+        <path d={`M ${minX} ${minY + corner} L ${minX} ${minY} L ${minX + corner} ${minY}`} />
+        <path d={`M ${maxX - corner} ${minY} L ${maxX} ${minY} L ${maxX} ${minY + corner}`} />
+        <path d={`M ${minX} ${maxY - corner} L ${minX} ${maxY} L ${minX + corner} ${maxY}`} />
+        <path d={`M ${maxX - corner} ${maxY} L ${maxX} ${maxY} L ${maxX} ${maxY - corner}`} />
+      </g>
+      <g className="handFrame-dots">
+        {landmarks.map((point, index) => (
+          <circle key={index} cx={point.x} cy={point.y} r="0.0035" />
+        ))}
+      </g>
     </svg>
   );
 }
@@ -1231,6 +1280,7 @@ function UserApp() {
   const [wordIndex, setWordIndex] = useState(0);
   const [letterIndex, setLetterIndex] = useState(0);
   const [holdProgress, setHoldProgress] = useState(0);
+  const [celebrating, setCelebrating] = useState(null);
   const { language, selectLanguage } = usePracticeLanguage();
   const copy = USER_COPY[language] ?? USER_COPY.de;
 
@@ -1377,21 +1427,37 @@ function UserApp() {
   function advancePracticeLetter() {
     setHoldProgress(0);
     holdRef.current = { label: null, startedAt: 0 };
-    window.setTimeout(() => {
-      advancingRef.current = false;
-    }, 260);
 
     if (letterIndex < currentWord.length - 1) {
       setLetterIndex((value) => value + 1);
+      window.setTimeout(() => {
+        advancingRef.current = false;
+      }, 260);
       return;
     }
 
-    setStatus(`Wort geschafft: ${currentWord}`);
-    setLetterIndex(0);
-    setWordIndex((value) => (value + 1) % PRACTICE_WORDS.length);
+    const completedWord = currentWord;
+    setStatus(`${copy.wordDone} ${completedWord}`);
+    setCelebrating(completedWord);
+
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(copy.celebrate(completedWord));
+      utter.lang = language === 'de' ? 'de-DE' : 'en-US';
+      utter.rate = 1.05;
+      window.speechSynthesis.speak(utter);
+    }
+
+    window.setTimeout(() => {
+      setCelebrating(null);
+      setLetterIndex(0);
+      setWordIndex((value) => (value + 1) % PRACTICE_WORDS.length);
+      advancingRef.current = false;
+    }, 2600);
   }
 
   function nextPracticeWord() {
+    setCelebrating(null);
     setLetterIndex(0);
     setWordIndex((value) => (value + 1) % PRACTICE_WORDS.length);
   }
@@ -1470,6 +1536,7 @@ function UserApp() {
           <a href="#/app" className="active">{copy.navPractice}</a>
           <a href="#/train">{copy.navData}</a>
           <a href="#/model">{copy.navTraining}</a>
+          <a href="#/info">{copy.navStory}</a>
         </nav>
         <LanguageControl language={language} onChange={selectLanguage} />
       </header>
@@ -1478,10 +1545,20 @@ function UserApp() {
         <section className="userCameraCard">
           <div className="userVideoShell">
             <video ref={tracker.videoRef} muted playsInline />
+            <HandFrame landmarks={tracker.landmarks} />
             <div className="cameraPredictionOverlay">
               <strong>{prediction?.label ?? '-'}</strong>
               <span>{prediction ? `${confidence}%` : modelReady ? copy.noHand : copy.loading}</span>
             </div>
+            {celebrating && (
+              <div className="celebrationOverlay" role="status" aria-live="polite">
+                <div className="celebrationCard">
+                  <span className="celebrationEyebrow">{copy.wordDone}</span>
+                  <strong>{celebrating}</strong>
+                  <span className="celebrationSubtitle">{copy.wordDoneSubtitle(celebrating)}</span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="userCameraStatus">
             <span>{tracker.features ? copy.handDetected : tracker.status}</span>
@@ -1572,10 +1649,173 @@ function UserApp() {
   );
 }
 
+const STORY_COPY = {
+  de: {
+    navPractice: 'Üben',
+    navData: 'Daten',
+    navTraining: 'Training',
+    navStory: 'Story',
+    eyebrow: 'Engineering Story',
+    title: 'Wie ich dem Browser beigebracht habe, Hände zu lesen',
+    intro: 'Echtzeit-Gebärdenerkennung im Browser klingt geradeaus — bis ich es bauen wollte. Drei Versuche, ein paar verlorene Wochenenden und eine entscheidende Einsicht später lief es dann doch.',
+    attempt1Tag: 'Versuch 01',
+    attempt1Title: 'Vorgefertigte öffentliche Modelle',
+    attempt1Body: 'Erster Reflex: ein fertiges Sign-Language-Modell von HuggingFace oder TF Hub nehmen. Hat nicht funktioniert. Die wenigen Modelle sind auf ASL trainiert — nicht auf DGS — und brechen bei Beleuchtung, Kamerawinkel oder Hauttönen außerhalb ihres Datensatzes zusammen. Selbst mit perfekter Kameraführung blieb ich bei ~30% Genauigkeit.',
+    attempt2Tag: 'Versuch 02',
+    attempt2Title: 'Eigenes CNN auf Bildern',
+    attempt2Body: 'Logischer nächster Schritt: eigene Bilder, eigenes Modell. Ich habe ein paar hundert Frames pro Buchstabe gesammelt und MobileNetV2 fine-getunt. In meinem Wohnzimmer ~85%. Auf einem anderen Rechner, mit anderem Hintergrund — Absturz auf 40%. Das Modell hatte die Tapete gelernt, nicht die Hand.',
+    attempt3Tag: 'Lösung',
+    attempt3Title: 'Hand-Landmarks, relativ zur Handfläche',
+    attempt3Body: 'Die Einsicht: ich brauche kein Bild, sondern die Geometrie der Hand. MediaPipe Hand Landmarker liefert 21 3D-Punkte pro Hand, robust gegen Beleuchtung, Hintergrund und Hauttöne. Ich normalisiere die Punkte relativ zum Handgelenk und skaliere auf die Bounding-Box — Position, Größe und Distanz spielen keine Rolle mehr. Der Eingang schrumpft von 224×224×3 (≈150k Werte) auf 63 Zahlen. Ein MLP mit 2 Hidden Layers reicht, klassifiziert auf CPU in unter 1 ms und läuft komplett im Browser.',
+    impactTag: 'Wirkung',
+    impactTitle: 'Warum das ein guter Hack ist',
+    impactBody: 'Ich habe das Problem von „mehr Daten sammeln" auf „bessere Features bauen" verlagert. Statt zehntausender Fotos: ~80 Aufnahmen pro Zeichen. Statt schwerem CNN: ein MLP mit 12 KB. Statt Cloud-Inferenz: alles im Browser, ohne Server, ohne Latenz, ohne Datenschutz-Risiko. Die richtige Repräsentation schlägt das größere Modell.',
+    stackTag: 'Stack',
+    stackTitle: 'Unter der Haube',
+    stackItems: [
+      ['MediaPipe Hand Landmarker', '21 3D-Punkte, auf Millionen Bildern vortrainiert.'],
+      ['Custom Normalisierung', 'Punkte relativ zum Handgelenk, skaliert auf Bounding-Box.'],
+      ['TensorFlow.js MLP', '2 Hidden Layers, im Browser trainiert, in IndexedDB gespeichert.'],
+      ['Zero Backend', 'Inferenz, Training und Export komplett client-seitig.']
+    ],
+    metricsTitle: 'In Zahlen',
+    metrics: [
+      ['~80', 'Aufnahmen pro Zeichen'],
+      ['63', 'Eingangs-Features'],
+      ['12 KB', 'Modellgröße'],
+      ['<1 ms', 'Inferenzzeit'],
+      ['100%', 'Client-Side']
+    ],
+    backCta: 'Zur Übung'
+  },
+  en: {
+    navPractice: 'Practice',
+    navData: 'Data',
+    navTraining: 'Training',
+    navStory: 'Story',
+    eyebrow: 'Engineering Story',
+    title: 'How I taught a browser to read hands',
+    intro: 'Real-time sign recognition in the browser sounds straightforward — until I tried to build it. Three attempts, a few lost weekends, and one crucial insight later, it works.',
+    attempt1Tag: 'Attempt 01',
+    attempt1Title: 'Pretrained public models',
+    attempt1Body: 'First reflex: grab a sign-language model from HuggingFace or TF Hub. Did not work. The few public models are trained on ASL — not DGS — and collapse the moment lighting, camera angle, or skin tone drift outside their training set. Even with perfect framing, accuracy sat around 30%.',
+    attempt2Tag: 'Attempt 02',
+    attempt2Title: 'My own image-classification CNN',
+    attempt2Body: 'Logical next step: my own images, my own model. I collected a few hundred frames per letter and fine-tuned MobileNetV2. In my living room: ~85%. On another machine, different background — crashed to 40%. The model had learned the wallpaper, not the hand.',
+    attempt3Tag: 'Solution',
+    attempt3Title: 'Hand landmarks, relative to the palm',
+    attempt3Body: 'The insight: I do not need an image — I need the geometry of the hand. MediaPipe Hand Landmarker returns 21 3D points per hand, robust to lighting, background, and skin tone. I normalize each point relative to the wrist and scale by the bounding box — position, size, and distance stop mattering. The input shrinks from 224×224×3 (≈150k values) to 63 numbers. An MLP with 2 hidden layers is enough, classifies in under 1 ms on CPU, and runs entirely in the browser.',
+    impactTag: 'Impact',
+    impactTitle: 'Why this is a good hack',
+    impactBody: 'I moved the problem from "collect more data" to "engineer better features." Instead of tens of thousands of photos: ~80 captures per sign. Instead of a heavy CNN: an MLP with 12 KB. Instead of cloud inference: everything in the browser — no servers, no latency, no privacy risk. The right representation beats the bigger model.',
+    stackTag: 'Stack',
+    stackTitle: 'Under the hood',
+    stackItems: [
+      ['MediaPipe Hand Landmarker', '21 3D points, pretrained on millions of images.'],
+      ['Custom normalization', 'Points relative to the wrist, scaled to the bounding box.'],
+      ['TensorFlow.js MLP', '2 hidden layers, trained in the browser, stored in IndexedDB.'],
+      ['Zero backend', 'Inference, training, and export run entirely client-side.']
+    ],
+    metricsTitle: 'By the numbers',
+    metrics: [
+      ['~80', 'captures per sign'],
+      ['63', 'input features'],
+      ['12 KB', 'model size'],
+      ['<1 ms', 'inference time'],
+      ['100%', 'client-side']
+    ],
+    backCta: 'Back to practice'
+  }
+};
+
+function InfoApp() {
+  const { language, selectLanguage } = usePracticeLanguage();
+  const copy = STORY_COPY[language] ?? STORY_COPY.de;
+
+  return (
+    <main className="app userApp storyApp">
+      <header className="userTopbar">
+        <a className="userBrand" href="#/app">{APP_NAME}</a>
+        <nav>
+          <a href="#/app">{copy.navPractice}</a>
+          <a href="#/train">{copy.navData}</a>
+          <a href="#/model">{copy.navTraining}</a>
+          <a href="#/info" className="active">{copy.navStory}</a>
+        </nav>
+        <LanguageControl language={language} onChange={selectLanguage} />
+      </header>
+
+      <section className="storyHero">
+        <span className="storyEyebrow">{copy.eyebrow}</span>
+        <h1>{copy.title}</h1>
+        <p>{copy.intro}</p>
+      </section>
+
+      <section className="storySteps">
+        <article className="storyStep storyStepFailed">
+          <span className="storyStepTag">{copy.attempt1Tag}</span>
+          <h2>{copy.attempt1Title}</h2>
+          <p>{copy.attempt1Body}</p>
+        </article>
+
+        <article className="storyStep storyStepFailed">
+          <span className="storyStepTag">{copy.attempt2Tag}</span>
+          <h2>{copy.attempt2Title}</h2>
+          <p>{copy.attempt2Body}</p>
+        </article>
+
+        <article className="storyStep storyStepWin">
+          <span className="storyStepTag">{copy.attempt3Tag}</span>
+          <h2>{copy.attempt3Title}</h2>
+          <p>{copy.attempt3Body}</p>
+        </article>
+      </section>
+
+      <section className="storySplit">
+        <div className="storyImpact">
+          <span className="storyEyebrow">{copy.impactTag}</span>
+          <h2>{copy.impactTitle}</h2>
+          <p>{copy.impactBody}</p>
+        </div>
+
+        <div className="storyMetrics">
+          <span className="storyEyebrow">{copy.metricsTitle}</span>
+          <div className="storyMetricsGrid">
+            {copy.metrics.map(([value, label]) => (
+              <div key={label} className="storyMetric">
+                <strong>{value}</strong>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="storyStack">
+        <span className="storyEyebrow">{copy.stackTag}</span>
+        <h2>{copy.stackTitle}</h2>
+        <div className="storyStackGrid">
+          {copy.stackItems.map(([title, body]) => (
+            <div key={title} className="storyStackItem">
+              <strong>{title}</strong>
+              <span>{body}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="storyCta">
+        <a href="#/app">{copy.backCta} →</a>
+      </section>
+    </main>
+  );
+}
+
 function AppRouter() {
   const hash = useHashRoute();
   if (hash.startsWith('#/app')) return <UserApp />;
   if (hash.startsWith('#/model')) return <TrainModelApp />;
+  if (hash.startsWith('#/info')) return <InfoApp />;
   return <TrainerApp />;
 }
 
