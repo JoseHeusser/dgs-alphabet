@@ -12,8 +12,7 @@ import {
   Upload,
   RotateCcw,
   Save,
-  Trash2,
-  Volume2
+  Trash2
 } from 'lucide-react';
 import './styles.css';
 
@@ -1440,14 +1439,6 @@ function UserApp() {
     setStatus(`${copy.wordDone} ${completedWord}`);
     setCelebrating(completedWord);
 
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(copy.celebrate(completedWord));
-      utter.lang = language === 'de' ? 'de-DE' : 'en-US';
-      utter.rate = 1.05;
-      window.speechSynthesis.speak(utter);
-    }
-
     window.setTimeout(() => {
       setCelebrating(null);
       setLetterIndex(0);
@@ -1520,12 +1511,6 @@ function UserApp() {
     }
   }
 
-  function speakPrediction() {
-    if (!prediction?.label || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(prediction.label));
-  }
-
   const confidence = prediction ? Math.round(prediction.confidence * 100) : 0;
 
   return (
@@ -1595,10 +1580,6 @@ function UserApp() {
             <button className={practiceMode ? 'primary active' : 'primary'} onClick={() => setPracticeMode((value) => !value)}>
               <Image size={17} />
               {practiceMode ? copy.free : copy.practiceButton}
-            </button>
-            <button disabled={!prediction} onClick={speakPrediction}>
-              <Volume2 size={17} />
-              {copy.speak}
             </button>
             {practiceMode && (
               <button onClick={nextPracticeWord}>
