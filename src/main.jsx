@@ -56,7 +56,7 @@ const MODEL_META_KEY = 'dgs-model-meta-v1';
 const DEFAULT_MODEL_BUNDLE_URL = '/dgs-mlp-v1-bundle.json';
 const APP_NAME = 'DGS Fingeralphabet Trainer';
 const LANGUAGE_KEY = 'dgs-practice-language-v1';
-const HOLD_TO_CONFIRM_MS = 1000;
+const HOLD_TO_CONFIRM_MS = 600;
 const USER_COPY = {
   de: {
     navPractice: 'Üben',
